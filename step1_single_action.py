@@ -26,10 +26,13 @@ import os
 
 import anthropic
 
+from dotenv import load_dotenv
 from browser import BrowserSession
 from tools import TOOLS, dispatch
 
 MODEL = "claude-sonnet-5"
+
+load_dotenv()
 
 
 def build_prompt(goal: str, elements: list) -> str:
