@@ -13,16 +13,25 @@ not by raw CSS selectors or pixel coordinates. Reasoning:
     native desktop apps (via OS accessibility APIs) - so this choice is
     also most of the answer to the "heterogeneous surfaces" design question.
 
+Observation is done via Playwright's aria_snapshot() (YAML-based accessibility
+tree). Actions are executed via get_by_role(role, name=...), which is a
+separate, stable public API independent of how the snapshot was captured.
+
 This module is deliberately dumb: it does one action per call and returns
 plain data. All "deciding what to do" logic lives outside it (in the LLM
 loop for discovery, or the artifact for replay).
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from typing import Any
 
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
+
+# Matches lines like:  - button "Log In"   or   - heading "Sign in" [level=1]
+# from the YAML aria_snapshot() output. We only need role + name; the
+# indentation/nesting and bracketed attributes don't matter for flattening.
+_ARIA_LINE_RE = re.compile(r'^\s*-\s+(?P<role>[a-zA-Z][a-zA-Z0-9]*)(?:\s+"(?P<name>[^"]*)")?')
 
 # Roles worth showing to the LLM / worth targeting. Purely structural nodes
 # (generic, none, text runs without interactivity) are filtered out so the
@@ -75,22 +84,24 @@ class BrowserSession:
 
     def snapshot(self) -> list[Element]:
         """Flatten the accessibility tree into a list of interactable
-        elements. This - not raw HTML - is what gets shown to Claude."""
+        elements. This - not raw HTML - is what gets shown to Claude.
+
+        Uses aria_snapshot(), which returns the tree as YAML text (Playwright
+        removed the older dict-based page.accessibility.snapshot() in 1.57
+        after a 3-year deprecation). We don't need the nesting/hierarchy for
+        this purpose, so a line-by-line regex parse is enough - actions still
+        target elements by role+name via get_by_role(), unchanged."""
         assert self.page is not None, "call start() first"
-        tree = self.page.accessibility.snapshot(interesting_only=True)
+        yaml_text = self.page.locator("body").aria_snapshot()
         elements: list[Element] = []
-
-        def walk(node: dict[str, Any] | None) -> None:
-            if not node:
-                return
-            role = node.get("role", "")
-            name = node.get("name", "")
+        for line in yaml_text.splitlines():
+            match = _ARIA_LINE_RE.match(line)
+            if not match:
+                continue
+            role = match.group("role")
+            name = match.group("name") or ""
             if role in INTERACTABLE_ROLES and name:
-                elements.append(Element(role=role, name=name, value=node.get("value")))
-            for child in node.get("children", []) or []:
-                walk(child)
-
-        walk(tree)
+                elements.append(Element(role=role, name=name))
         return elements
 
     def navigate(self, url: str) -> None:
