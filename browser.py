@@ -57,6 +57,7 @@ class Element:
     role: str
     name: str
     value: str | None = None
+    selector: str | None = None  # set only for "fallback" elements - see snapshot()
 
 
 class BrowserSession:
@@ -69,6 +70,10 @@ class BrowserSession:
         self._pw: Playwright | None = None
         self._browser: Browser | None = None
         self.page: Page | None = None
+        # name -> CSS selector, rebuilt on every snapshot(). Lets click()/
+        # type_text()/read_text() reach elements that have no accessible
+        # name at all (see snapshot() docstring for why that happens).
+        self._fallback_selectors: dict[str, str] = {}
 
     def start(self, url: str) -> None:
         self._pw = sync_playwright().start()
@@ -86,14 +91,27 @@ class BrowserSession:
         """Flatten the accessibility tree into a list of interactable
         elements. This - not raw HTML - is what gets shown to Claude.
 
-        Uses aria_snapshot(), which returns the tree as YAML text (Playwright
-        removed the older dict-based page.accessibility.snapshot() in 1.57
-        after a 3-year deprecation). We don't need the nesting/hierarchy for
-        this purpose, so a line-by-line regex parse is enough - actions still
-        target elements by role+name via get_by_role(), unchanged."""
+        Two passes:
+          1. Accessibility-tree pass (aria_snapshot). Works whenever the app
+             actually wires a label to a control - the common case, and the
+             preferred targeting strategy because it's semantic and survives
+             markup changes.
+          2. Fallback pass over raw <input>/<textarea>/<select> elements.
+             Real legacy enterprise apps routinely put visual label text in
+             a <p> or plain <span> next to a field instead of a real
+             <label>/aria-label - which means the browser computes NO
+             accessible name for that field at all, and pass 1 can't see it.
+             For those, we identify the element by its raw HTML name/id/
+             placeholder attribute instead, and remember a CSS selector so
+             click()/type_text() can still reach it. This is a deliberately
+             lower-priority strategy: only used when pass 1 found nothing.
+        """
         assert self.page is not None, "call start() first"
-        yaml_text = self.page.locator("body").aria_snapshot()
         elements: list[Element] = []
+        self._fallback_selectors = {}
+
+        # --- Pass 1: accessibility tree ---
+        yaml_text = self.page.locator("body").aria_snapshot()
         for line in yaml_text.splitlines():
             match = _ARIA_LINE_RE.match(line)
             if not match:
@@ -102,6 +120,47 @@ class BrowserSession:
             name = match.group("name") or ""
             if role in INTERACTABLE_ROLES and name:
                 elements.append(Element(role=role, name=name))
+
+        # --- Pass 2: raw form-control fallback ---
+        for control in self.page.locator("input:visible, textarea:visible, select:visible").all():
+            # Skip controls that already have a real accessible name -
+            # those were already captured in pass 1, don't duplicate them.
+            own_snapshot = control.aria_snapshot()
+            first_line = own_snapshot.splitlines()[0] if own_snapshot else ""
+            own_match = _ARIA_LINE_RE.match(first_line)
+            if own_match and own_match.group("name"):
+                continue
+
+            tag = control.evaluate("el => el.tagName").lower()
+            input_type = (control.get_attribute("type") or "text").lower()
+            name_attr = control.get_attribute("name")
+            id_attr = control.get_attribute("id")
+            placeholder = control.get_attribute("placeholder")
+
+            identifier = name_attr or id_attr or placeholder
+            if not identifier:
+                continue  # no accessible name AND no attribute to fall back on - truly unreachable, skip
+
+            if tag == "select":
+                role = "combobox"
+            elif input_type == "checkbox":
+                role = "checkbox"
+            elif input_type == "radio":
+                role = "radio"
+            else:
+                role = "textbox"
+
+            if name_attr:
+                selector, via = f'[name="{name_attr}"]', "name"
+            elif id_attr:
+                selector, via = f"#{id_attr}", "id"
+            else:
+                selector, via = f'[placeholder="{placeholder}"]', "placeholder"
+
+            display_name = f"{identifier} (unlabeled field, targeted via {via} attribute)"
+            elements.append(Element(role=role, name=display_name, selector=selector))
+            self._fallback_selectors[display_name] = selector
+
         return elements
 
     def navigate(self, url: str) -> None:
@@ -110,13 +169,21 @@ class BrowserSession:
 
     def click(self, role: str, name: str) -> None:
         assert self.page is not None, "call start() first"
+        if name in self._fallback_selectors:
+            self.page.locator(self._fallback_selectors[name]).first.click(timeout=5000)
+            return
         self.page.get_by_role(role, name=name, exact=False).first.click(timeout=5000)
 
     def type_text(self, role: str, name: str, text: str) -> None:
         assert self.page is not None, "call start() first"
+        if name in self._fallback_selectors:
+            self.page.locator(self._fallback_selectors[name]).first.fill(text, timeout=5000)
+            return
         self.page.get_by_role(role, name=name, exact=False).first.fill(text, timeout=5000)
 
     def read_text(self, role: str, name: str) -> str:
         assert self.page is not None, "call start() first"
+        if name in self._fallback_selectors:
+            return self.page.locator(self._fallback_selectors[name]).first.input_value(timeout=5000)
         locator = self.page.get_by_role(role, name=name, exact=False).first
         return locator.inner_text(timeout=5000)
