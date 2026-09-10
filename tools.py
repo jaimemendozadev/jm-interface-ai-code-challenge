@@ -67,6 +67,29 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "type_credential",
+        "description": (
+            "Type a STORED credential into a textbox identified by role and "
+            "accessible name. Use this instead of type_text for anything "
+            "credential-shaped (login username, password, PIN, etc). You "
+            "specify which stored credential to use by its key - you never "
+            "see or receive the actual value; it's injected directly by the "
+            "system executing your actions."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "role": {"type": "string"},
+                "name": {"type": "string"},
+                "credential_key": {
+                    "type": "string",
+                    "description": "Which stored credential to type, e.g. 'username' or 'password'.",
+                },
+            },
+            "required": ["role", "name", "credential_key"],
+        },
+    },
+    {
         "name": "finish",
         "description": (
             "Call this once the goal has been achieved (or is impossible). "
@@ -84,9 +107,20 @@ TOOLS: list[dict[str, Any]] = [
 ]
 
 
-def dispatch(session: BrowserSession, tool_name: str, tool_input: dict[str, Any]) -> str:
+def dispatch(
+    session: BrowserSession,
+    tool_name: str,
+    tool_input: dict[str, Any],
+    credentials: dict[str, str] | None = None,
+) -> str:
     """Execute one tool call against the live browser and return a plain-text
-    observation to feed back to Claude on the next turn."""
+    observation to feed back to Claude on the next turn.
+
+    `credentials` maps symbolic keys ("username", "password") to their real
+    values. It is used ONLY inside this function, for type_credential calls -
+    the raw value is never put into the observation string returned to
+    Claude, so it never re-enters the conversation, the transcript, or
+    anything logged from it."""
     try:
         if tool_name == "click":
             session.click(tool_input["role"], tool_input["name"])
@@ -94,6 +128,12 @@ def dispatch(session: BrowserSession, tool_name: str, tool_input: dict[str, Any]
         if tool_name == "type_text":
             session.type_text(tool_input["role"], tool_input["name"], tool_input["text"])
             return "Typed successfully."
+        if tool_name == "type_credential":
+            key = tool_input["credential_key"]
+            if not credentials or key not in credentials:
+                return f"Action failed: no stored credential is available for '{key}'."
+            session.type_text(tool_input["role"], tool_input["name"], credentials[key])
+            return f"Typed the stored '{key}' credential into the field."  # value itself never appears here
         if tool_name == "navigate":
             session.navigate(tool_input["url"])
             return f"Navigated to {tool_input['url']}."

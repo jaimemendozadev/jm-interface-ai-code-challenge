@@ -27,6 +27,7 @@ import os
 import anthropic
 
 from dotenv import load_dotenv
+
 from browser import BrowserSession
 from tools import TOOLS, dispatch
 
@@ -35,18 +36,38 @@ MODEL = "claude-sonnet-5"
 load_dotenv()
 
 
-def build_prompt(goal: str, elements: list) -> str:
+def build_prompt(goal: str, elements: list, credential_keys: list[str]) -> str:
     element_lines = "\n".join(
         f"- role={e.role!r} name={e.name!r}" + (f" value={e.value!r}" if e.value else "")
         for e in elements
     )
+    credential_note = ""
+    if credential_keys:
+        keys = ", ".join(credential_keys)
+        credential_note = (
+            f"\nStored credentials are available for: {keys}. Use the "
+            f"type_credential tool for these - you will not see their "
+            f"actual values, only reference them by key.\n"
+        )
     return (
-        f"Goal: {goal}\n\n"
+        f"Goal: {goal}\n"
+        f"{credential_note}\n"
         f"Here are the currently interactable elements on the page, identified "
         f"by their accessibility role and accessible name:\n{element_lines}\n\n"
         f"Decide the single next action that makes progress toward the goal. "
         f"Call exactly one tool."
     )
+
+
+def load_credentials() -> dict[str, str]:
+    """Credentials live in environment variables (via .env, which is
+    gitignored), never in code or in a prompt. Only include keys that are
+    actually set, so Claude isn't told a credential exists when it doesn't."""
+    candidates = {
+        "username": os.environ.get("PARABANK_USERNAME"),
+        "password": os.environ.get("PARABANK_PASSWORD"),
+    }
+    return {key: value for key, value in candidates.items() if value}
 
 
 def main() -> None:
@@ -60,6 +81,8 @@ def main() -> None:
     if not api_key:
         raise SystemExit("Set ANTHROPIC_API_KEY in your environment first.")
 
+    credentials = load_credentials()
+
     client = anthropic.Anthropic(api_key=api_key)
     session = BrowserSession(headless=args.headless)
     session.start(args.url)
@@ -70,7 +93,7 @@ def main() -> None:
         for e in elements:
             print(f"   - {e.role}: {e.name!r}")
 
-        prompt = build_prompt(args.goal, elements)
+        prompt = build_prompt(args.goal, elements, list(credentials.keys()))
 
         response = client.messages.create(
             model=MODEL,
@@ -86,9 +109,11 @@ def main() -> None:
             return
 
         block = tool_use_blocks[0]
+        # Safe to print block.input as-is: type_credential's input only ever
+        # contains the symbolic key ("password"), never the actual value.
         print(f"[claude] wants to call: {block.name}({json.dumps(block.input)})")
 
-        observation = dispatch(session, block.name, block.input)
+        observation = dispatch(session, block.name, block.input, credentials=credentials)
         print(f"[result] {observation}")
 
     finally:
