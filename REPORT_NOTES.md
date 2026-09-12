@@ -24,10 +24,11 @@ end to reconstruct this from memory — you'll lose the good specifics.
   (get_by_role) — semantic, survives markup changes, and is the same
   mechanism available on desktop apps via OS accessibility APIs.
 - Real discovery run surfaced a concrete legacy-app problem: Parabank's
-  username/password fields use a `<p>` tag as the visual label instead of a
-  real `<label>`/aria-label, so the browser computes NO accessible name for
+  username/password fields use a <p> tag as the visual label instead of a
+  real <label>/aria-label, so the browser computes NO accessible name for
   them at all — pass 1 (accessibility tree) can't see them.
-- Fallback strategy added: a second pass scans raw `<input>/<textarea>/<select>` elements not already covered by pass 1, and identifies them by
+- Fallback strategy added: a second pass scans raw <input>/<textarea>/
+  <select> elements not already covered by pass 1, and identifies them by
   raw HTML name/id/placeholder attribute instead, with a remembered CSS
   selector. This is a deliberately lower-priority, less-robust strategy —
   used only when the semantic one finds nothing.
@@ -79,6 +80,17 @@ end to reconstruct this from memory — you'll lose the good specifics.
   into the transcript/evidence log either.
 - Credentials stored in environment variables via .env (gitignored) for
   this project. Production would use a secrets manager — see Cuts.
+- Trade-off discovered in practice: because the model never sees the raw
+  credential value, it also can't tell whether it's retrying the exact
+  same (wrong) value or something different - every type_credential call
+  looks identical to it regardless of whether the underlying value
+  changed. Hit this directly: a bad test-account password caused the
+  agent to blindly retry login several times before hitting max-steps,
+  because it had no way to recognize "I already tried this." Security
+  and self-awareness are in tension here; a loop-detection guard (N
+  identical consecutive tool calls -> stop/escalate rather than retry)
+  would be the fix, planned as part of Step 5's escalation logic rather
+  than patched in here.
 
 ## 7. Cuts
 
