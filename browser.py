@@ -166,13 +166,31 @@ class BrowserSession:
     def navigate(self, url: str) -> None:
         assert self.page is not None, "call start() first"
         self.page.goto(url, wait_until="domcontentloaded")
+        self._settle()
 
     def click(self, role: str, name: str) -> None:
         assert self.page is not None, "call start() first"
         if name in self._fallback_selectors:
             self.page.locator(self._fallback_selectors[name]).first.click(timeout=5000)
-            return
-        self.page.get_by_role(role, name=name, exact=False).first.click(timeout=5000)
+        else:
+            self.page.get_by_role(role, name=name, exact=False).first.click(timeout=5000)
+        # A click on a submit-style button often triggers a full page
+        # navigation. Without this, the very next snapshot() can race
+        # ahead of that navigation and capture a stale, mid-load page -
+        # which looked exactly like a login that silently failed.
+        self._settle()
+
+    def _settle(self) -> None:
+        """Give a possible navigation triggered by the last action time to
+        finish before the next snapshot() is taken. Best-effort: plenty of
+        actions (e.g. clicking something that doesn't navigate at all)
+        won't ever reach "networkidle", so a timeout here is expected and
+        fine, not an error."""
+        assert self.page is not None
+        try:
+            self.page.wait_for_load_state("networkidle", timeout=3000)
+        except Exception:
+            pass
 
     def type_text(self, role: str, name: str, text: str) -> None:
         assert self.page is not None, "call start() first"

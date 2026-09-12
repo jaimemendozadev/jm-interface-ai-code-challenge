@@ -1,4 +1,11 @@
+"""
+Shared helpers for the agent loop: the structured per-step log record,
+formatting the current page's interactable elements for the prompt, and
+building the system prompt that carries the goal + credential availability.
+"""
+
 from dataclasses import dataclass
+
 
 @dataclass
 class StepLog:
@@ -7,6 +14,7 @@ class StepLog:
     tool_input: dict | None  # safe to log as-is: type_credential never carries a raw value
     observation: str
     elapsed_seconds: float
+    elements_seen: str = ""  # the snapshot text Claude was shown before deciding this action
 
 
 def describe_elements(elements: list) -> str:

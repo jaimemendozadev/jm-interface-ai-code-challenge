@@ -1,21 +1,19 @@
 """
-STEP 2 - the real observe -> decide -> act loop.
+The discovery agent: observe -> decide -> act, in a loop.
 
-Wraps step 1's single round trip in a loop that keeps going until the goal
-is met (Claude calls `finish`), a stopping condition is hit (max steps,
-timeout), or Claude gets stuck (returns no tool call - nothing safe left to
-try, which is the seed of Step 5's human-escalation hook). Every step gets
-logged as structured JSON, plus a screenshot of wherever the run ends up -
-this is your /evidence/ deliverable for the discovery run, and it's also
-the raw material Step 3's artifact-recording logic will consume.
+Runs until the goal is met (Claude calls `finish`), a stopping condition is
+hit (max steps, timeout), or Claude gets stuck (returns no tool call -
+nothing safe left to try, which is the seed of the human-escalation hook).
+Every step gets logged as structured JSON, plus a screenshot of wherever
+the run ends up - this is the /evidence/ deliverable for the discovery
+run, and the raw material the artifact-recording logic will consume.
 
 Usage:
-    uv run step2_agent_loop.py \\
+    uv run main.py \\
         --url "https://parabank.parasoft.com/parabank/index.htm" \\
         --goal "Log in, then read and report the checking account balance" \\
         --max-steps 12
 """
-from __future__ import annotations
 
 import argparse
 import json
@@ -30,13 +28,11 @@ from dotenv import load_dotenv
 
 from browser import BrowserSession
 from tools import TOOLS, dispatch
-
 from utils import StepLog, describe_elements, build_system_prompt
-
 
 load_dotenv()
 
-ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', "claude-sonnet-5")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
 
 
 def main() -> None:
@@ -52,7 +48,6 @@ def main() -> None:
     args = parser.parse_args()
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
-
     if not api_key:
         raise SystemExit("Set ANTHROPIC_API_KEY in your environment first.")
 
@@ -73,15 +68,14 @@ def main() -> None:
     system_prompt = build_system_prompt(args.goal, list(credentials.keys()))
 
     messages: list[dict] = []
-
     step_logs: list[StepLog] = []
     start_time = time.monotonic()
-
     outcome = "max_steps_reached"
 
     try:
         elements = session.snapshot()
-        messages.append({"role": "user", "content": describe_elements(elements)})
+        elements_text = describe_elements(elements)
+        messages.append({"role": "user", "content": elements_text})
 
         for step in range(1, args.max_steps + 1):
             elapsed = time.monotonic() - start_time
@@ -100,14 +94,14 @@ def main() -> None:
             messages.append({"role": "assistant", "content": response.content})
 
             tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
-            
+
             if not tool_use_blocks:
                 # Claude responded with text only - nothing safe to act on.
-                # This is the seed of Step 5's human-escalation hook: for
-                # now, log it and stop rather than guessing what to do.
+                # This is the seed of the human-escalation hook: for now,
+                # log it and stop rather than guessing what to do.
                 text = "".join(b.text for b in response.content if b.type == "text")
                 print(f"[step {step}] Claude did not call a tool - stopping. Said: {text!r}")
-                step_logs.append(StepLog(step, None, None, f"NO_TOOL_CALL: {text}", elapsed))
+                step_logs.append(StepLog(step, None, None, f"NO_TOOL_CALL: {text}", elapsed, elements_text))
                 outcome = "stuck_no_tool_call"
                 break
 
@@ -116,19 +110,20 @@ def main() -> None:
 
             observation = dispatch(session, block.name, block.input, credentials=credentials)
             print(f"[step {step}] -> {observation}")
-            step_logs.append(StepLog(step, block.name, block.input, observation, elapsed))
+            step_logs.append(StepLog(step, block.name, block.input, observation, elapsed, elements_text))
 
             if block.name == "finish":
                 outcome = "success" if block.input.get("success") else "goal_not_achievable"
                 break
 
             elements = session.snapshot()
+            elements_text = describe_elements(elements)
             messages.append(
                 {
                     "role": "user",
                     "content": [
                         {"type": "tool_result", "tool_use_id": block.id, "content": observation},
-                        {"type": "text", "text": describe_elements(elements)},
+                        {"type": "text", "text": elements_text},
                     ],
                 }
             )
