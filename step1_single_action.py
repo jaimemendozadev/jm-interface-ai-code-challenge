@@ -9,7 +9,6 @@ it's the smallest possible slice that proves:
     browser -> accessibility tree -> Claude -> one real action on the page
 
 Usage:
-    export ANTHROPIC_API_KEY=sk-ant-...
     python step1_single_action.py \\
         --url "https://parabank.parasoft.com/parabank/index.htm" \\
         --goal "Click the link to log in to Parabank"
@@ -31,9 +30,9 @@ from dotenv import load_dotenv
 from browser import BrowserSession
 from tools import TOOLS, dispatch
 
-MODEL = "claude-sonnet-5"
-
 load_dotenv()
+
+ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', "claude-sonnet-5")
 
 
 def build_prompt(goal: str, elements: list, credential_keys: list[str]) -> str:
@@ -96,7 +95,7 @@ def main() -> None:
         prompt = build_prompt(args.goal, elements, list(credentials.keys()))
 
         response = client.messages.create(
-            model=MODEL,
+            model=ANTHROPIC_MODEL,
             max_tokens=1024,
             tools=TOOLS,
             messages=[{"role": "user", "content": prompt}],
