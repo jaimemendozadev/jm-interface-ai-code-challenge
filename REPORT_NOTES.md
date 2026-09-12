@@ -17,6 +17,14 @@ end to reconstruct this from memory — you'll lose the good specifics.
 ## 2. Artifact schema
 
 - (not built yet — Step 3)
+- Design decision to make deliberately: the discovery transcript can (and
+  did, in practice) include exploratory detours and dead ends - e.g. a
+  run that clicked into an account details page looking for a balance,
+  didn't find a usable value there, backed out, and found it on the
+  overview page instead. The artifact should record the DISTILLED minimal
+  correct path, not a verbatim replay of every step the discovery run
+  actually took - otherwise replay would waste time (or fail) reproducing
+  a dead end that isn't actually necessary to reach the goal.
 
 ## 3. Determinism & error handling
 
