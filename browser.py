@@ -205,3 +205,46 @@ class BrowserSession:
             return self.page.locator(self._fallback_selectors[name]).first.input_value(timeout=5000)
         locator = self.page.get_by_role(role, name=name, exact=False).first
         return locator.inner_text(timeout=5000)
+
+    # --- Target-aware methods, for replay ---
+    #
+    # The methods above (click/type_text/read_text) are for DISCOVERY:
+    # they look an element up in self._fallback_selectors, a cache that
+    # only snapshot() ever populates. That's fine for discovery, which
+    # calls snapshot() before every decision - but replay never calls
+    # snapshot() at all, because it doesn't need to explore anything; the
+    # artifact already records exactly which locator_strategy/attribute
+    # to use for each target. These methods build the locator directly
+    # from that recorded strategy instead, with no dependency on any
+    # prior snapshot() call ever having happened.
+
+    def _resolve_locator(self, role: str, name: str, strategy: str, attribute: str | None):
+        assert self.page is not None, "call start() first"
+        if strategy == "attribute_fallback":
+            attr = attribute or "name"
+            return self.page.locator(f'[{attr}="{name}"]')
+        return self.page.get_by_role(role, name=name, exact=False)
+
+    def click_target(self, role: str, name: str, strategy: str, attribute: str | None = None) -> None:
+        self._resolve_locator(role, name, strategy, attribute).first.click(timeout=5000)
+        self._settle()
+
+    def type_text_target(self, role: str, name: str, text: str, strategy: str, attribute: str | None = None) -> None:
+        self._resolve_locator(role, name, strategy, attribute).first.fill(text, timeout=5000)
+
+    def read_text_target(self, role: str, name: str, strategy: str, attribute: str | None = None) -> str:
+        locator = self._resolve_locator(role, name, strategy, attribute).first
+        if strategy == "attribute_fallback":
+            return locator.input_value(timeout=5000)
+        return locator.inner_text(timeout=5000)
+
+    def read_page_text(self, css_selector: str | None = None) -> str:
+        """Read visible text that ISN'T attached to a named interactive
+        element - a balance in a table cell, an error banner, a plain
+        paragraph. read_text() only works for buttons/links/textboxes
+        etc.; this is the fallback for everything else, which in a lot of
+        real UIs (including this one) is most of the actual content."""
+        assert self.page is not None, "call start() first"
+        selector = css_selector or "body"
+        text = self.page.locator(selector).first.inner_text(timeout=5000)
+        return text[:4000]  # bounded - most of what we need is short; avoid dumping a huge page

@@ -1,5 +1,6 @@
 """
-Shared helpers for the replay engine.
+Shared helpers for the replay engine: error type, placeholder resolution,
+per-step execution, extraction, and output-key lookup.
 """
 from __future__ import annotations
 
@@ -39,6 +40,8 @@ def run_step(
 ) -> None:
     target = step.target
     resolved_name = resolve(target.name, params) if target else None
+    strategy = target.locator_strategy.value if target else None
+    attribute = target.attribute if target else None
 
     try:
         if step.action == ActionType.TYPE_CREDENTIAL:
@@ -50,20 +53,20 @@ def run_step(
             # process at all, so calling browser.py directly is fine - the
             # security boundary that matters (never let Claude see this
             # value) simply doesn't apply during replay.
-            session.type_text(target.role, resolved_name, credentials[key])
+            session.type_text_target(target.role, resolved_name, credentials[key], strategy, attribute)
 
         elif step.action == ActionType.TYPE_TEXT:
             text = resolve(step.param_key or "", params)
-            session.type_text(target.role, resolved_name, text)
+            session.type_text_target(target.role, resolved_name, text, strategy, attribute)
 
         elif step.action == ActionType.CLICK:
-            session.click(target.role, resolved_name)
+            session.click_target(target.role, resolved_name, strategy, attribute)
 
         elif step.action == ActionType.NAVIGATE:
             session.navigate(resolve(step.param_key or "", params))
 
         elif step.action == ActionType.READ_TEXT:
-            text = session.read_text(target.role, resolved_name)
+            text = session.read_text_target(target.role, resolved_name, strategy, attribute)
             if step.output_key:
                 step_outputs[step.output_key] = text
 

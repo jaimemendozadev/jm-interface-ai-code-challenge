@@ -10,7 +10,7 @@ invoke in production instead of running a fresh discovery loop every time
 
 Usage (run from the project root):
     uv run python -m replay.main \\
-        --artifact parabank_read_account_balance.v1.json \\
+        --artifact artifacts/parabank_read_account_balance.v1.json \\
         --param account_number=31437
 """
 from __future__ import annotations
@@ -61,16 +61,16 @@ def main() -> None:
             print(f"[replay step {step.step}] {step.action.value}")
             run_step(session, step, params, credentials, step_outputs)
 
-        
+        cp = artifact.checkpoint
+        cp_name = resolve(cp.target.name, params)
         # Checkpoint: confirm we actually reached the state we expect,
         # rather than assuming every prior click/type worked just because
         # it didn't raise. This is what stops replay from reporting
         # success on the wrong page.
-        cp = artifact.checkpoint
-        cp_name = resolve(cp.target.name, params)
-
         try:
-            session.read_text(cp.target.role, cp_name)
+            session.read_text_target(
+                cp.target.role, cp_name, cp.target.locator_strategy.value, cp.target.attribute
+            )
         except Exception as exc:
             raise ReplayError(-1, cp.description, str(exc)) from exc
 
