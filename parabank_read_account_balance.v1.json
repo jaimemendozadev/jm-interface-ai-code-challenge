@@ -82,14 +82,14 @@
       "type": "currency",
       "description": "Current account balance.",
       "source_step": 5,
-      "extraction": "split account_row on tab characters, take index 1"
+      "extraction": { "method": "split", "delimiter": "\t", "index": 1 }
     },
     {
       "name": "available_balance",
       "type": "currency",
       "description": "Available balance (may differ from balance if funds are pending/held).",
       "source_step": 5,
-      "extraction": "split account_row on tab characters, take index 2"
+      "extraction": { "method": "split", "delimiter": "\t", "index": 2 }
     }
   ],
   "checkpoint": {
