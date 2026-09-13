@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 
 from artifact_schema import Artifact
 from browser import BrowserSession
+from safety import load_allowlist, check_domain_allowed, check_action_allowed, AllowlistViolation
 from .utils import run_step, resolve, ReplayError, BusinessOutcomeError, find_output_key_for_step, apply_extraction
 
 load_dotenv()
@@ -54,6 +55,12 @@ def main() -> None:
     with open(args.artifact) as f:
         artifact = Artifact.model_validate(json.load(f))
 
+    # Safety: check the artifact's own base_url before ever opening a
+    # browser to it. Same allowlist config discovery uses - one shared
+    # policy, not two independently-maintained copies.
+    allowlist = load_allowlist()
+    check_domain_allowed(artifact.base_url, allowlist)
+
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     evidence_dir = Path(args.evidence_dir or f"evidence/replay_{timestamp}")
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -73,7 +80,7 @@ def main() -> None:
     try:
         for step in artifact.steps:
             print(f"[replay step {step.step}] {step.action.value}")
-            run_step(session, step, params, credentials, step_outputs)
+            run_step(session, step, params, credentials, step_outputs, allowlist)
 
         cp = artifact.checkpoint
         cp_name = resolve(cp.target.name, params)
@@ -100,6 +107,15 @@ def main() -> None:
 
         result["outcome"] = "success"
         result["outputs"] = outputs
+
+    except AllowlistViolation as exc:
+        # Distinct from both business outcomes and hard failures on
+        # purpose: this isn't about the data, and it isn't the app
+        # behaving unexpectedly - it's the artifact itself trying to do
+        # something outside policy. Worth its own outcome so this never
+        # gets silently lumped in with an ordinary bug.
+        result["outcome"] = "blocked_by_allowlist"
+        result["message"] = str(exc)
 
     except BusinessOutcomeError as exc:
         # A legitimate result, not a crash - e.g. "no such account number."

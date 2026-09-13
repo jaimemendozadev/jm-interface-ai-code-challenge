@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from artifact_schema import Artifact, ActionType, Extraction, ExtractionMethod, Step
 from browser import BrowserSession
+from safety import AllowlistConfig, check_action_allowed, check_domain_allowed
 
 
 class ReplayError(Exception):
@@ -52,7 +53,13 @@ def run_step(
     params: dict[str, str],
     credentials: dict[str, str],
     step_outputs: dict[str, str],
+    allowlist: AllowlistConfig,
 ) -> None:
+    # Safety check first, before touching the browser at all - an
+    # artifact that's drifted to request a disallowed action or domain
+    # should never get to try, not even once.
+    check_action_allowed(step.action.value, allowlist)
+
     target = step.target
     resolved_name = resolve(target.name, params) if target else None
     strategy = target.locator_strategy.value if target else None
@@ -78,7 +85,9 @@ def run_step(
             session.click_target(target.role, resolved_name, strategy, attribute)
 
         elif step.action == ActionType.NAVIGATE:
-            session.navigate(resolve(step.param_key or "", params))
+            url = resolve(step.param_key or "", params)
+            check_domain_allowed(url, allowlist)
+            session.navigate(url)
 
         elif step.action == ActionType.READ_TEXT:
             text = session.read_text_target(target.role, resolved_name, strategy, attribute)
