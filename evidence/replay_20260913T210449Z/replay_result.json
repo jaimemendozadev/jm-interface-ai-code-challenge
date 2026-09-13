@@ -1,0 +1,13 @@
+{
+  "capability_id": "parabank_read_account_balance",
+  "version": 1,
+  "input_parameters": {
+    "account_number": "42204"
+  },
+  "timestamp_utc": "20260913T210449Z",
+  "outcome": "success",
+  "outputs": {
+    "balance": "$515.50",
+    "available_balance": "$515.50"
+  }
+}

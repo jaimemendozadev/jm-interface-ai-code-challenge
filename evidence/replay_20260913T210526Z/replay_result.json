@@ -1,0 +1,12 @@
+{
+  "capability_id": "parabank_read_account_balance",
+  "version": 1,
+  "input_parameters": {
+    "account_number": "31437"
+  },
+  "timestamp_utc": "20260913T210526Z",
+  "outcome": "business_outcome",
+  "outcome_type": "not_found",
+  "failed_step": 5,
+  "message": "No row matching {account_number}='31437' - the record may not exist."
+}
