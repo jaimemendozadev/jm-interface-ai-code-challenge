@@ -18,12 +18,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from datetime import datetime, timezone
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 from artifact_schema import Artifact
 from browser import BrowserSession
-from .utils import run_step, resolve, ReplayError, find_output_key_for_step, apply_extraction
+from .utils import run_step, resolve, ReplayError, BusinessOutcomeError, find_output_key_for_step, apply_extraction
 
 load_dotenv()
 
@@ -33,6 +35,9 @@ def main() -> None:
     parser.add_argument("--artifact", required=True, help="Path to the artifact JSON file.")
     parser.add_argument("--param", action="append", default=[], help="key=value input parameter, repeatable.")
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument(
+        "--evidence-dir", default=None, help="Defaults to evidence/replay_<timestamp>/"
+    )
     args = parser.parse_args()
 
     params: dict[str, str] = {}
@@ -49,12 +54,21 @@ def main() -> None:
     with open(args.artifact) as f:
         artifact = Artifact.model_validate(json.load(f))
 
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    evidence_dir = Path(args.evidence_dir or f"evidence/replay_{timestamp}")
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"Replaying {artifact.capability_id} v{artifact.version} ({len(artifact.steps)} steps)")
 
     session = BrowserSession(headless=args.headless)
     session.start(artifact.base_url)
     step_outputs: dict[str, str] = {}
-    result: dict = {"capability_id": artifact.capability_id, "version": artifact.version}
+    result: dict = {
+        "capability_id": artifact.capability_id,
+        "version": artifact.version,
+        "input_parameters": params,  # credentials never appear here - only whatever was passed via --param
+        "timestamp_utc": timestamp,
+    }
 
     try:
         for step in artifact.steps:
@@ -66,12 +80,16 @@ def main() -> None:
         # Checkpoint: confirm we actually reached the state we expect,
         # rather than assuming every prior click/type worked just because
         # it didn't raise. This is what stops replay from reporting
-        # success on the wrong page.
+        # success on the wrong page. Same business-outcome-vs-hard-failure
+        # rule as run_step applies here too, since the checkpoint target
+        # can itself be parameterized.
         try:
             session.read_text_target(
                 cp.target.role, cp_name, cp.target.locator_strategy.value, cp.target.attribute
             )
         except Exception as exc:
+            if "{" in cp.target.name:
+                raise BusinessOutcomeError(-1, "not_found", f"{cp.description} (got: {exc})") from exc
             raise ReplayError(-1, cp.description, str(exc)) from exc
 
         outputs: dict[str, str] = {}
@@ -83,12 +101,19 @@ def main() -> None:
         result["outcome"] = "success"
         result["outputs"] = outputs
 
+    except BusinessOutcomeError as exc:
+        # A legitimate result, not a crash - e.g. "no such account number."
+        # Reported distinctly from hard_failure on purpose (see
+        # BusinessOutcomeError's docstring) - this is the distinction
+        # section 3.3 calls out as the most commonly conflated one.
+        result["outcome"] = "business_outcome"
+        result["outcome_type"] = exc.outcome_type
+        result["failed_step"] = exc.step
+        result["message"] = exc.message
+
     except ReplayError as exc:
-        # Everything caught here is currently classified as a hard failure.
-        # Distinguishing "expected business outcome" (e.g. invalid
-        # credentials) from this is the next increment - it needs replay
-        # to recognize specific known error states, not just catch
-        # exceptions.
+        # Something about the app itself, not the input data - a
+        # non-parameterized target failed to resolve.
         result["outcome"] = "hard_failure"
         result["failed_step"] = exc.step
         result["expected"] = exc.expected
@@ -96,6 +121,15 @@ def main() -> None:
 
     finally:
         print(json.dumps(result, indent=2))
+
+        result_path = evidence_dir / "replay_result.json"
+        result_path.write_text(json.dumps(result, indent=2))
+
+        screenshot_path = evidence_dir / "final_state.png"
+        if session.page is not None:
+            session.page.screenshot(path=str(screenshot_path))
+
+        print(f"Evidence written to: {evidence_dir}/")
         input("\nPress Enter to close the browser...")
         session.close()
 

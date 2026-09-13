@@ -9,17 +9,32 @@ from browser import BrowserSession
 
 
 class ReplayError(Exception):
-    """A hard failure during replay - carries enough detail (which step,
-    what we expected, what we actually observed) to debug without
-    re-running anything. This is the 'hard failure' branch of section
-    3.3's three-way result contract (business outcome / recoverable /
-    hard failure) - the other two branches are the next increment."""
+    """A HARD failure during replay - something unexpected about the app
+    itself (a non-parameterized target vanished, an unrecognized page
+    state). Carries enough detail (which step, what we expected, what we
+    actually observed) to debug without re-running anything."""
 
     def __init__(self, step: int, expected: str, observed: str) -> None:
         self.step = step
         self.expected = expected
         self.observed = observed
         super().__init__(f"step {step}: expected {expected!r}, observed {observed!r}")
+
+
+class BusinessOutcomeError(Exception):
+    """A legitimate, expected result that just happens to not be success -
+    e.g. 'no account with that number'. The distinguishing factor: the
+    failing target's name was built from a CALLER-SUPPLIED parameter, so
+    the failure is about the data the caller gave us, not about the
+    system being broken. Section 3.3 / the glossary calls conflating this
+    with a hard failure "the most common design mistake here" - this
+    class exists specifically so main.py can report the two differently."""
+
+    def __init__(self, step: int, outcome_type: str, message: str) -> None:
+        self.step = step
+        self.outcome_type = outcome_type
+        self.message = message
+        super().__init__(message)
 
 
 def resolve(template: str, params: dict[str, str]) -> str:
@@ -79,6 +94,18 @@ def run_step(
         raise
     except Exception as exc:
         target_desc = f"{target.role}='{resolved_name}'" if target else "(whole page)"
+        # The rule: if this target's name was built from a parameter the
+        # caller supplied (contains "{"), a failure to find it is about
+        # THEIR data, not our system - a business outcome. A fixed,
+        # non-parameterized target failing (e.g. the Log In button
+        # vanishing) means something about the app itself is wrong - a
+        # real hard failure.
+        if target and "{" in target.name and step.action in (ActionType.READ_TEXT, ActionType.CLICK):
+            raise BusinessOutcomeError(
+                step.step,
+                outcome_type="not_found",
+                message=f"No {target.role} matching {target.name}='{resolved_name}' - the record may not exist.",
+            ) from exc
         raise ReplayError(step.step, target_desc, str(exc)) from exc
 
 
