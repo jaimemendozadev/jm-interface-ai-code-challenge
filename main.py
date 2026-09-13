@@ -77,6 +77,7 @@ def main() -> None:
         elements = session.snapshot()
         elements_text = describe_elements(elements)
         messages.append({"role": "user", "content": elements_text})
+        action_history: list[tuple[str, str]] = []  # (tool_name, json-serialized input), for cycle detection
 
         for step in range(1, args.max_steps + 1):
             elapsed = time.monotonic() - start_time
@@ -107,7 +108,7 @@ def main() -> None:
                 break
 
             block = tool_use_blocks[0]
-            print(f"[step {step}] {block.name}({json.dumps(block.input)}) \n")
+            print(f"[step {step}] {block.name}({json.dumps(block.input)})")
 
             observation = dispatch(session, block.name, block.input, credentials=credentials)
             print(f"[step {step}] -> {observation} \n")
@@ -115,6 +116,26 @@ def main() -> None:
 
             if block.name == "finish":
                 outcome = "success" if block.input.get("success") else "goal_not_achievable"
+                break
+
+            # Cycle/dead-end detection: if the last N actions exactly repeat
+            # the N before them (same tool + same input, e.g. login retried
+            # identically 3 times), the agent is stuck in a loop it has no
+            # way to recognize itself - stop rather than burn the remaining
+            # step budget repeating a failing sequence. This is the seed of
+            # the human-escalation trigger (section 3.6): a real handoff
+            # would route this exact signal to a person instead of just
+            # stopping.
+            action_history.append((block.name, json.dumps(block.input, sort_keys=True)))
+            for cycle_len in (1, 2, 3, 4):
+                if (
+                    len(action_history) >= 2 * cycle_len
+                    and action_history[-cycle_len:] == action_history[-2 * cycle_len : -cycle_len]
+                ):
+                    print(f"[step {step}] Detected a repeating {cycle_len}-action cycle - stopping.")
+                    outcome = "stuck_repeated_cycle"
+                    break
+            if outcome == "stuck_repeated_cycle":
                 break
 
             elements = session.snapshot()
