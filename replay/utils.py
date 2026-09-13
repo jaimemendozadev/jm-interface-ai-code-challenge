@@ -1,7 +1,10 @@
+"""
+Shared helpers for the replay engine.
+"""
 from __future__ import annotations
+
 from artifact_schema import Artifact, ActionType, Extraction, ExtractionMethod, Step
 from browser import BrowserSession
-
 
 
 class ReplayError(Exception):
@@ -85,7 +88,7 @@ def apply_extraction(raw: str, extraction: Extraction) -> str:
         if index >= len(parts):
             raise ReplayError(-1, f"split result with index {index}", f"only {len(parts)} parts in {raw!r}")
         return parts[index].strip()
-    raise ReplayError(-1, f"known extraction method", extraction.method)
+    raise ReplayError(-1, "known extraction method", extraction.method)
 
 
 def find_output_key_for_step(artifact: Artifact, source_step: int) -> str:

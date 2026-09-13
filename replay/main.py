@@ -8,9 +8,9 @@ checkpoint, and return typed outputs. This is what an AI agent would
 invoke in production instead of running a fresh discovery loop every time
 - same driver, same Target/role/name concept, zero model calls.
 
-Usage:
-    uv run replay.py \\
-        --artifact artifacts/parabank_read_account_balance.v1.json \\
+Usage (run from the project root):
+    uv run python -m replay.main \\
+        --artifact parabank_read_account_balance.v1.json \\
         --param account_number=31437
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 
 from artifact_schema import Artifact
 from browser import BrowserSession
-from replay.utils import run_step, resolve, ReplayError, find_output_key_for_step, apply_extraction
+from .utils import run_step, resolve, ReplayError, find_output_key_for_step, apply_extraction
 
 load_dotenv()
 
@@ -61,12 +61,14 @@ def main() -> None:
             print(f"[replay step {step.step}] {step.action.value}")
             run_step(session, step, params, credentials, step_outputs)
 
+        
         # Checkpoint: confirm we actually reached the state we expect,
         # rather than assuming every prior click/type worked just because
         # it didn't raise. This is what stops replay from reporting
         # success on the wrong page.
         cp = artifact.checkpoint
         cp_name = resolve(cp.target.name, params)
+
         try:
             session.read_text(cp.target.role, cp_name)
         except Exception as exc:
