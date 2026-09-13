@@ -33,13 +33,14 @@ from utils import StepLog, describe_elements, build_system_prompt
 load_dotenv()
 
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
+MAX_STEPS = int(os.getenv("MAX_STEPS", 12))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", required=True)
     parser.add_argument("--goal", required=True)
-    parser.add_argument("--max-steps", type=int, default=12)
+    parser.add_argument("--max-steps", type=int, default=MAX_STEPS)
     parser.add_argument("--timeout-seconds", type=float, default=180)
     parser.add_argument("--headless", action="store_true")
     parser.add_argument(
@@ -106,10 +107,10 @@ def main() -> None:
                 break
 
             block = tool_use_blocks[0]
-            print(f"[step {step}] {block.name}({json.dumps(block.input)})")
+            print(f"[step {step}] {block.name}({json.dumps(block.input)}) \n")
 
             observation = dispatch(session, block.name, block.input, credentials=credentials)
-            print(f"[step {step}] -> {observation}")
+            print(f"[step {step}] -> {observation} \n")
             step_logs.append(StepLog(step, block.name, block.input, observation, elapsed, elements_text))
 
             if block.name == "finish":
