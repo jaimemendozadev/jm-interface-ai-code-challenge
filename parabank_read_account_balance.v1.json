@@ -1,0 +1,103 @@
+{
+  "capability_id": "parabank_read_account_balance",
+  "version": 1,
+  "description": "Logs in to Parabank and reads the balance for a given account number.",
+  "surface_type": "web",
+  "base_url": "https://parabank.parasoft.com/parabank/index.htm",
+  "input_parameters": [
+    {
+      "name": "account_number",
+      "type": "string",
+      "description": "The account number whose balance should be read, e.g. '31437'.",
+      "required": true
+    },
+    {
+      "name": "username",
+      "type": "credential",
+      "description": "Login username. Resolved by the caller at invocation time - never stored in this artifact.",
+      "required": true
+    },
+    {
+      "name": "password",
+      "type": "credential",
+      "description": "Login password. Resolved by the caller at invocation time - never stored in this artifact.",
+      "required": true
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "type_credential",
+      "target": {
+        "role": "textbox",
+        "name": "username",
+        "locator_strategy": "attribute_fallback",
+        "attribute": "name"
+      },
+      "param_key": "username"
+    },
+    {
+      "step": 2,
+      "action": "type_credential",
+      "target": {
+        "role": "textbox",
+        "name": "password",
+        "locator_strategy": "attribute_fallback",
+        "attribute": "name"
+      },
+      "param_key": "password"
+    },
+    {
+      "step": 3,
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "Log In",
+        "locator_strategy": "accessible_name"
+      }
+    },
+    {
+      "step": 4,
+      "action": "click",
+      "target": {
+        "role": "link",
+        "name": "Accounts Overview",
+        "locator_strategy": "accessible_name"
+      }
+    },
+    {
+      "step": 5,
+      "action": "read_text",
+      "target": {
+        "role": "row",
+        "name": "{account_number}",
+        "locator_strategy": "accessible_name"
+      },
+      "output_key": "account_row"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "balance",
+      "type": "currency",
+      "description": "Current account balance.",
+      "source_step": 5,
+      "extraction": "split account_row on tab characters, take index 1"
+    },
+    {
+      "name": "available_balance",
+      "type": "currency",
+      "description": "Available balance (may differ from balance if funds are pending/held).",
+      "source_step": 5,
+      "extraction": "split account_row on tab characters, take index 2"
+    }
+  ],
+  "checkpoint": {
+    "description": "The account row for the requested account number is visible and readable, confirming both a successful login and that the account exists.",
+    "target": {
+      "role": "row",
+      "name": "{account_number}",
+      "locator_strategy": "accessible_name"
+    }
+  }
+}
