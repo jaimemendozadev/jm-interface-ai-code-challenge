@@ -14,8 +14,8 @@ gets assembled from.
   `tools.py`'s `type_credential`).
 - ✅ Locator strategy — accessibility role+name primary, raw HTML
   attribute fallback for unlabeled fields (see `browser.py`).
-- ⬜ Artifact schema (recording a successful run as reusable data)
-- ⬜ Deterministic replay engine
+- ✅ Artifact schema (recording a successful run as reusable data)
+- ✅ Deterministic replay engine
 - ⬜ Human escalation / handoff
 - ⬜ Safety allowlist
 
