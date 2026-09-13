@@ -3,7 +3,7 @@ Shared helpers for the agent loop: the structured per-step log record,
 formatting the current page's interactable elements for the prompt, and
 building the system prompt that carries the goal + credential availability.
 """
-
+from __future__ import annotations
 from dataclasses import dataclass
 
 
