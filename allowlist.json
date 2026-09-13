@@ -1,0 +1,5 @@
+{
+  "allowed_domains": ["parabank.parasoft.com"],
+  "allowed_actions": ["click", "type_text", "type_credential", "navigate", "read_text", "read_page_text", "finish"],
+  "risky_actions": []
+}
