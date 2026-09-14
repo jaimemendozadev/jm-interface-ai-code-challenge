@@ -14,6 +14,7 @@ Usage:
         --goal "Log in, then read and report the checking account balance" \\
         --max-steps 12
 """
+from __future__ import annotations
 
 import argparse
 import json
@@ -29,6 +30,7 @@ from dotenv import load_dotenv
 from browser import BrowserSession
 from tools import TOOLS, dispatch
 from utils import StepLog, describe_elements, build_system_prompt
+from safety import load_allowlist, check_domain_allowed, check_action_allowed, AllowlistViolation
 
 load_dotenv()
 
@@ -61,6 +63,11 @@ def main() -> None:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     evidence_dir = Path(args.evidence_dir or f"evidence/discovery_{timestamp}")
     evidence_dir.mkdir(parents=True, exist_ok=True)
+
+    # Safety: check the target domain before ever opening a browser to it.
+    # A failure here is a hard, immediate stop - no partial attempt.
+    allowlist = load_allowlist()
+    check_domain_allowed(args.url, allowlist)
 
     client = anthropic.Anthropic(api_key=api_key)
     session = BrowserSession(headless=args.headless)
@@ -109,6 +116,16 @@ def main() -> None:
 
             block = tool_use_blocks[0]
             print(f"[step {step}] {block.name}({json.dumps(block.input)})")
+
+            try:
+                check_action_allowed(block.name, allowlist)
+                if block.name == "navigate":
+                    check_domain_allowed(block.input.get("url", ""), allowlist)
+            except AllowlistViolation as exc:
+                print(f"[step {step}] BLOCKED by allowlist: {exc}")
+                step_logs.append(StepLog(step, block.name, block.input, f"ALLOWLIST_VIOLATION: {exc}", elapsed, elements_text))
+                outcome = "blocked_by_allowlist"
+                break
 
             observation = dispatch(session, block.name, block.input, credentials=credentials)
             print(f"[step {step}] -> {observation} \n")
