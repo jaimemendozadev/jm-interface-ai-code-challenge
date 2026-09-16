@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 
 from artifact_schema import Artifact
 from browser import BrowserSession
-from safety import load_allowlist, check_domain_allowed, check_action_allowed, AllowlistViolation
+from safety import load_allowlist, check_domain_allowed, AllowlistViolation
 from .utils import run_step, resolve, ReplayError, BusinessOutcomeError, find_output_key_for_step, apply_extraction
 
 load_dotenv()
