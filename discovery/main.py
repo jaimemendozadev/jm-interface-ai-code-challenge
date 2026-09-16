@@ -78,6 +78,7 @@ def main() -> None:
 
     messages: list[dict] = []
     step_logs: list[StepLog] = []
+    interventions: list[dict] = []  # separate from step_logs on purpose - see finally block
     start_time = time.monotonic()
     outcome = "max_steps_reached"
 
@@ -113,6 +114,17 @@ def main() -> None:
                 print(f"[step {step}] Claude did not call a tool - escalating to a human.")
                 handoff = request_intervention(
                     session, evidence_dir, args.goal, step, f"Claude returned no tool call. Said: {text!r}"
+                )
+                interventions.append(
+                    {
+                        "step": step,
+                        "trigger": "no_tool_call",
+                        "reason": f"Claude returned no tool call. Said: {text!r}",
+                        "resumed": handoff.resumed,
+                        "human_notes": handoff.human_notes,
+                        "screenshot_before": handoff.screenshot_before,
+                        "screenshot_after": handoff.screenshot_after,
+                    }
                 )
                 step_logs.append(
                     StepLog(
@@ -172,10 +184,22 @@ def main() -> None:
 
             if cycle_len_detected:
                 print(f"[step {step}] Detected a repeating {cycle_len_detected}-action cycle - escalating to a human.")
-                handoff = request_intervention(
-                    session, evidence_dir, args.goal, step,
+                reason = (
                     f"Repeating {cycle_len_detected}-action cycle detected - the agent has no way to tell "
-                    f"it's retrying the same thing (see REPORT_NOTES.md's Safety section for why).",
+                    f"it's retrying the same thing (see REPORT_NOTES.md's Safety section for why)."
+                )
+                handoff = request_intervention(session, evidence_dir, args.goal, step, reason)
+                interventions.append(
+                    {
+                        "step": step,
+                        "trigger": "repeated_cycle",
+                        "cycle_length": cycle_len_detected,
+                        "reason": reason,
+                        "resumed": handoff.resumed,
+                        "human_notes": handoff.human_notes,
+                        "screenshot_before": handoff.screenshot_before,
+                        "screenshot_after": handoff.screenshot_after,
+                    }
                 )
                 step_logs.append(
                     StepLog(
@@ -233,6 +257,16 @@ def main() -> None:
             for entry in step_logs:
                 f.write(json.dumps(asdict(entry)) + "\n")
 
+        # Human interventions get their own file, separate from the
+        # ordinary step log - "record what the human did" (section 3.6)
+        # deserves a clearly-labeled record, not a string buried inside a
+        # generic per-step entry meant for agent actions.
+        if interventions:
+            interventions_path = evidence_dir / "interventions.jsonl"
+            with interventions_path.open("w") as f:
+                for entry in interventions:
+                    f.write(json.dumps(entry) + "\n")
+
         screenshot_path = evidence_dir / "final_state.png"
         if session.page is not None:
             session.page.screenshot(path=str(screenshot_path))
@@ -245,6 +279,7 @@ def main() -> None:
                     "url": args.url,
                     "outcome": outcome,
                     "steps_taken": len(step_logs),
+                    "interventions": len(interventions),
                     "timestamp_utc": timestamp,
                 },
                 indent=2,
