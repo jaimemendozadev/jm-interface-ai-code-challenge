@@ -189,8 +189,23 @@ def main() -> None:
                     break
                 elements = session.snapshot()
                 elements_text = describe_elements(elements)
+                # The API requires every tool_use block to be immediately
+                # followed by a matching tool_result - `block` here is the
+                # very action that triggered the cycle detection, and its
+                # tool_use was already appended as an assistant message
+                # above. A plain text-only message here would violate that
+                # and the next API call would reject the whole request.
                 messages.append(
-                    {"role": "user", "content": f"A human operator intervened and reported: {handoff.human_notes}\n\n{elements_text}"}
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "tool_result", "tool_use_id": block.id, "content": observation},
+                            {
+                                "type": "text",
+                                "text": f"A human operator intervened and reported: {handoff.human_notes}\n\n{elements_text}",
+                            },
+                        ],
+                    }
                 )
                 action_history.clear()  # the human likely changed the state - stale cycle history isn't meaningful anymore
                 continue
