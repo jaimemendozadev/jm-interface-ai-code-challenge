@@ -31,7 +31,7 @@ from browser import BrowserSession
 from tools import TOOLS, dispatch
 from utils import StepLog, describe_elements, build_system_prompt
 from safety import load_allowlist, check_domain_allowed, check_action_allowed, AllowlistViolation
-from escalation import request_intervention
+from .escalation import request_intervention
 
 load_dotenv()
 
