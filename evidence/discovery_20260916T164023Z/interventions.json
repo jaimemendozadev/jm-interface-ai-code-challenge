@@ -1,0 +1,12 @@
+[
+  {
+    "step": 6,
+    "trigger": "repeated_cycle",
+    "cycle_length": 3,
+    "reason": "Repeating 3-action cycle detected - the agent has no way to tell it's retrying the same thing (see REPORT_NOTES.md's Safety section for why).",
+    "resumed": true,
+    "human_notes": "Manually triggered human escalation with incorrect login credentials in .env file. About to manually login for user in UI with correct credentials.",
+    "screenshot_before": "evidence/discovery_20260916T164023Z/intervention_20260916T164038Z_before.png",
+    "screenshot_after": "evidence/discovery_20260916T164023Z/intervention_20260916T164038Z_after.png"
+  }
+]

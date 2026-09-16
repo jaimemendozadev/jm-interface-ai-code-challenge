@@ -1,0 +1,8 @@
+{
+  "goal": "Log in, then read and report the checking account balance",
+  "url": "https://parabank.parasoft.com/parabank/index.htm",
+  "outcome": "success",
+  "steps_taken": 16,
+  "interventions": 1,
+  "timestamp_utc": "20260916T164023Z"
+}
