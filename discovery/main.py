@@ -261,11 +261,16 @@ def main() -> None:
         # ordinary step log - "record what the human did" (section 3.6)
         # deserves a clearly-labeled record, not a string buried inside a
         # generic per-step entry meant for agent actions.
+        #
+        # Plain pretty-printed JSON here, not .jsonl: there are typically
+        # zero to a handful of these per run, and this file's whole job is
+        # to be read by a human reviewer - JSONL's one-line-per-record
+        # convention earns its keep on discovery_log.jsonl (potentially a
+        # dozen-plus entries, log-like), not on a short, rare report like
+        # this one.
         if interventions:
-            interventions_path = evidence_dir / "interventions.jsonl"
-            with interventions_path.open("w") as f:
-                for entry in interventions:
-                    f.write(json.dumps(entry) + "\n")
+            interventions_path = evidence_dir / "interventions.json"
+            interventions_path.write_text(json.dumps(interventions, indent=2))
 
         screenshot_path = evidence_dir / "final_state.png"
         if session.page is not None:
