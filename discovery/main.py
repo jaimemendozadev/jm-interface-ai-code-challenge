@@ -8,8 +8,8 @@ Every step gets logged as structured JSON, plus a screenshot of wherever
 the run ends up - this is the /evidence/ deliverable for the discovery
 run, and the raw material the artifact-recording logic will consume.
 
-Usage:
-    uv run main.py \\
+Usage (run from the project root):
+    uv run python -m discovery.main \\
         --url "https://parabank.parasoft.com/parabank/index.htm" \\
         --goal "Log in, then read and report the checking account balance" \\
         --max-steps 12
