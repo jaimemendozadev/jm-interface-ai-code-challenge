@@ -31,6 +31,7 @@ from browser import BrowserSession
 from tools import TOOLS, dispatch
 from utils import StepLog, describe_elements, build_system_prompt
 from safety import load_allowlist, check_domain_allowed, check_action_allowed, AllowlistViolation
+from escalation import request_intervention
 
 load_dotenv()
 
@@ -106,13 +107,32 @@ def main() -> None:
 
             if not tool_use_blocks:
                 # Claude responded with text only - nothing safe to act on.
-                # This is the seed of the human-escalation hook: for now,
-                # log it and stop rather than guessing what to do.
+                # This used to just stop here; now it's a real escalation
+                # instead of giving up.
                 text = "".join(b.text for b in response.content if b.type == "text")
-                print(f"[step {step}] Claude did not call a tool - stopping. Said: {text!r}")
-                step_logs.append(StepLog(step, None, None, f"NO_TOOL_CALL: {text}", elapsed, elements_text))
-                outcome = "stuck_no_tool_call"
-                break
+                print(f"[step {step}] Claude did not call a tool - escalating to a human.")
+                handoff = request_intervention(
+                    session, evidence_dir, args.goal, step, f"Claude returned no tool call. Said: {text!r}"
+                )
+                step_logs.append(
+                    StepLog(
+                        step, "human_intervention", None,
+                        f"NO_TOOL_CALL -> escalated. resumed={handoff.resumed}. notes={handoff.human_notes}",
+                        elapsed, elements_text,
+                    )
+                )
+                if not handoff.resumed:
+                    outcome = "escalated_and_aborted"
+                    break
+                # Control is back with automation - re-observe the page a
+                # human may have just changed, and keep going rather than
+                # blindly continuing from stale state.
+                elements = session.snapshot()
+                elements_text = describe_elements(elements)
+                messages.append(
+                    {"role": "user", "content": f"A human operator intervened and reported: {handoff.human_notes}\n\n{elements_text}"}
+                )
+                continue
 
             block = tool_use_blocks[0]
             print(f"[step {step}] {block.name}({json.dumps(block.input)})")
@@ -128,7 +148,7 @@ def main() -> None:
                 break
 
             observation = dispatch(session, block.name, block.input, credentials=credentials)
-            print(f"[step {step}] -> {observation} \n")
+            print(f"[step {step}] -> {observation}")
             step_logs.append(StepLog(step, block.name, block.input, observation, elapsed, elements_text))
 
             if block.name == "finish":
@@ -138,22 +158,42 @@ def main() -> None:
             # Cycle/dead-end detection: if the last N actions exactly repeat
             # the N before them (same tool + same input, e.g. login retried
             # identically 3 times), the agent is stuck in a loop it has no
-            # way to recognize itself - stop rather than burn the remaining
-            # step budget repeating a failing sequence. This is the seed of
-            # the human-escalation trigger (section 3.6): a real handoff
-            # would route this exact signal to a person instead of just
-            # stopping.
+            # way to recognize itself. This now triggers a real escalation
+            # instead of just stopping.
             action_history.append((block.name, json.dumps(block.input, sort_keys=True)))
+            cycle_len_detected = None
             for cycle_len in (1, 2, 3, 4):
                 if (
                     len(action_history) >= 2 * cycle_len
                     and action_history[-cycle_len:] == action_history[-2 * cycle_len : -cycle_len]
                 ):
-                    print(f"[step {step}] Detected a repeating {cycle_len}-action cycle - stopping.")
-                    outcome = "stuck_repeated_cycle"
+                    cycle_len_detected = cycle_len
                     break
-            if outcome == "stuck_repeated_cycle":
-                break
+
+            if cycle_len_detected:
+                print(f"[step {step}] Detected a repeating {cycle_len_detected}-action cycle - escalating to a human.")
+                handoff = request_intervention(
+                    session, evidence_dir, args.goal, step,
+                    f"Repeating {cycle_len_detected}-action cycle detected - the agent has no way to tell "
+                    f"it's retrying the same thing (see REPORT_NOTES.md's Safety section for why).",
+                )
+                step_logs.append(
+                    StepLog(
+                        step, "human_intervention", None,
+                        f"STUCK_CYCLE -> escalated. resumed={handoff.resumed}. notes={handoff.human_notes}",
+                        elapsed, elements_text,
+                    )
+                )
+                if not handoff.resumed:
+                    outcome = "escalated_and_aborted"
+                    break
+                elements = session.snapshot()
+                elements_text = describe_elements(elements)
+                messages.append(
+                    {"role": "user", "content": f"A human operator intervened and reported: {handoff.human_notes}\n\n{elements_text}"}
+                )
+                action_history.clear()  # the human likely changed the state - stale cycle history isn't meaningful anymore
+                continue
 
             elements = session.snapshot()
             elements_text = describe_elements(elements)
