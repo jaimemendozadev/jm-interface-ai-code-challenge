@@ -40,36 +40,64 @@ A few architecture choices made ahead of time:
 
 ## 2. Artifact schema
 
-A capability artifact (`artifact_schema.py`) is a distinct data structure
-from a raw discovery transcript, deliberately. A real discovery run
-against Parabank included an exploratory detour into an account-details
-page while looking for a balance, backed out, and found the value on the
-overview page instead. If the artifact simply replayed that transcript
-verbatim, replay would waste time (or fail outright) reproducing a
-detour that was never actually necessary to reach the goal. The artifact
-therefore records the **distilled minimal path**, not everything the
-discovery run happened to try.
+When we run `uv run python -m discovery.main` from the root folder, we end up
+creating an `discovery_log.jsonl` file in `/evidence` that serves as the basis
+for the finalized `artifact.json` that's stored in the `/artifacts` folder.
 
-Each `Step` mirrors the shape of a tool call the agent actually made
-(`action`, `target`, `param_key`, `output_key`) — converting a successful
-transcript into an artifact is close to mechanical, not a rewrite into an
-unrelated format. A `Target` carries both `role`/`name` and an explicit
-`locator_strategy` (`accessible_name` or `attribute_fallback`, plus which
-raw HTML `attribute` when the latter), so a reviewer can see at a glance
-which steps rest on strong, semantic identification and which rest on a
-lower-confidence fallback — the reasoning about robustness the brief
-asks for, made structural rather than left as prose in this report.
+> <strong>IMPORTANT</strong>: It bears stating we use Claude to look at the
+> `discovery_log.jsonl` file and create the final `artifact.json` file.
+> Unfortunately there's no automated process for creating the file after
+> running the `discovery.main` script, at least not for v1 of this challenge.
 
-Outputs declare an `Extraction` as a small, closed, machine-executable
-operation (`whole` or `split` with a delimiter/index) rather than a free
-English sentence — an earlier draft used a sentence like _"split on tab,
-take index 1,"_ which reads fine to a human but can't actually be
-executed by replay code without hardcoding per-artifact parsing logic.
-Fixed before building the replay engine around the wrong assumption.
+On the initial traversal/step (and subsequent steps) of the Parabank website, we
+leverage the Playwright BrowserSession class to create a session object that allows
+us/the script/llm to "see" all the elements available on the page at the time of
+invocation. What happens next is we create a string description of all the elements
+on the current session/page and identify those elements by their `role`, `name`, and
+`value`.
 
-`ParameterType.CREDENTIAL` never appears with a value in the artifact
-JSON — the same security posture from discovery (Section 6) expressed at
-the schema level, not just in Python.
+Knowing what's available on the current session/page, we add this information as a
+`User` message that gets added to a list of messages that's sent to the Claude
+Model so it see what's on the current page. The model then decides what's the next
+step and actions it should take to achieve the target goal.
+
+Next steps for the model could be a tool actions like a `type_credential` or `click`
+for example. Whatever the model decided to do, we record that step in a `step_logs`
+list. We then repeat the process again until the model achieves the target under
+the max steps it's allowed to take. If it achieves the goal, we take the `step_logs`
+and create the final `discovery_log.jsonl` that serves as the basis for our reusable
+capability in `/replay/main.py`.
+
+When we run the final `artifact.json` file in `/replay/main.py` it has the following
+the 4 important fields:
+
+```
+{
+  "input_parameters": [],
+  "steps": [],
+  "outputs": [],
+  "checkpoint": {}
+}
+```
+
+The `input_parameters` are a list of described arguments with their specified types
+that are needed to run the `artifact` correctly at the time of invocation.
+
+The `steps` field contains a list of `step` objects that mirror the steps that were
+recorded during the initial running of the `discovery` script. Each numbered step
+tells you what the model did as an `action`, what the `target` of that step was.
+
+So for example, if the first step was the action of `type_credential`, the model was
+knew that based on the current elements of the curren page it was on, it needed to
+find an element with a `role` of textbox and it could find it by using the
+`locator_strategy` of `attribute_fallback`.
+
+Essentially for every step, we were going to perform an `action` on a `target`
+element that we had to find by using the `locator_strategy` of finding that element.
+
+The `outputs` field is a list of what you get back. Each one points at which step
+produced it (source_step) and how to pull the specific value out of that step's
+raw text (extraction).
 
 ## 3. Determinism & error handling
 
