@@ -13,30 +13,6 @@ Both share the following dependencies, each file is one implementation of concer
 - `tools.py`/`artifact_schema.py` (the action vocabulary); and
 - `safety.py` (allowlist enforcement).
 
-Two decisions worth defending explicitly:
-
-**No framework (LangChain/LangGraph).** The agent loop is a plain
-`while`/`for` calling the Anthropic API directly, appending each
-assistant `tool_use` and its `tool_result` to a growing `messages` list.
-This is fully legible — every mechanic in the loop is something I can
-point to and explain — rather than something a framework does for me
-that I'd have to reverse-engineer under interview questioning.
-
-**CLI, not a web service.** The deliverable asks for exact commands to
-run, and the agent loop is inherently multi-turn and occasionally
-long-running (including pausing indefinitely for human input during
-escalation) — a poor fit for a synchronous HTTP request/response cycle.
-A thin API wrapper around the replay engine would be a reasonable
-addition (see Cuts), but the core loop itself doesn't want to live inside
-one request handler.
-
-**Model/tooling:** Claude Sonnet via direct tool-use, `disable_parallel_tool_use=True`
-(exactly one action decided per turn — simpler to reason about and log,
-at the cost of more round trips for multi-step goals). Locator strategy —
-the single decision everything else depends on — is accessibility
-role + accessible name, not CSS selectors or screenshot coordinates; see
-Section 3 for why.
-
 ## 2. Artifact schema
 
 A capability artifact (`artifact_schema.py`) is a distinct data structure
@@ -201,22 +177,36 @@ self-awareness are in real tension here.
 
 ## 7. Cuts
 
-- **Secrets manager.** Environment variables via `.env` for this project;
-  the first thing to change for production.
+- **No framework (LangChain/LangGraph).** The agent loop is a plain
+  `while`/`for` calling the Anthropic API directly, appending each
+  assistant `tool_use` and its `tool_result` to a growing `messages` list.
+  This is fully legible — every mechanic in the loop is something I can
+  point to and explain — rather than something a framework does for me
+  that I'd have to reverse-engineer under interview questioning.<br />
+
+- **CLI, not a web service.** The deliverable asks for exact commands to
+  run, and the agent loop is inherently multi-turn and occasionally
+  long-running (including pausing indefinitely for human input during
+  escalation) — a poor fit for a synchronous HTTP request/response cycle.<br />
+
 - **Fine-grained/semantic risk classification.** The allowlist currently
   gates by action type only, not by what a click actually does — see
-  Section 6.
+  Section 6.<br />
 - **More robust stuck-detection.** Exact-cycle-matching missed a run that
   was genuinely stuck but varied its tactics — see Section 5. Tracking
-  repeated failure _types_ or distinct pages visited would catch this.
+  repeated failure _types_ or distinct pages visited would catch this.<br />
+
 - **Multi-tenant reuse and desktop support** are designed (Sections 4)
   but not implemented — the brief explicitly scopes this as a design
-  answer, not a build requirement.
+  answer, not a build requirement.<br />
+
 - **Operator UI fidelity.** The handoff mechanism and control-transfer
   model are real; the "console" is this terminal, not a dedicated
-  interface, per the brief's own scope note.
-- **Agent-facing capability interface** (the optional stretch goal
-  exposing artifacts as a callable catalog) was not attempted — the time
-  budget went toward making the core loop, schema, replay, safety, and
-  escalation all genuinely real and evidenced rather than adding
-  breadth on top of a thinner core.
+  interface, per the brief's own scope note.<br />
+
+<!-- **Model/tooling:** Claude Sonnet via direct tool-use, `disable_parallel_tool_use=True`
+(exactly one action decided per turn — simpler to reason about and log,
+at the cost of more round trips for multi-step goals). Locator strategy —
+the single decision everything else depends on — is accessibility
+role + accessible name, not CSS selectors or screenshot coordinates; see
+Section 3 for why. -->
