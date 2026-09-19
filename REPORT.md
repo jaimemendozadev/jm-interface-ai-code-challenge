@@ -13,6 +13,31 @@ Both share the following dependencies, each file is one implementation of concer
 - `tools.py`/`artifact_schema.py` (the action vocabulary); and
 - `safety.py` (allowlist enforcement).
 
+<br />
+
+A few architecture choices made ahead of time:
+
+- **No framework (LangChain/LangGraph).** The agent loop is a plain
+  `while`/`for` calling the Anthropic API directly, appending each
+  assistant `tool_use` and its `tool_result` to a growing `messages` list.
+  This is fully legible — every mechanic in the loop is something I can
+  point to and explain — rather than something a framework does for me
+  that I'd have to reverse-engineer under interview questioning.<br />
+
+- **Model/tooling:** Claude Sonnet via direct tool-use, `disable_parallel_tool_use=True`
+  (exactly one action decided per turn — simpler to reason about and log,
+  at the cost of more round trips for multi-step goals). Locator strategy —
+  the single decision everything else depends on — is accessibility
+  role + accessible name, not CSS selectors or screenshot coordinates; see
+  Section 3 for why.<br />
+
+- **CLI, not a web service.** The deliverable asks for exact commands to
+  run, and the agent loop is inherently multi-turn and occasionally
+  long-running (including pausing indefinitely for human input during
+  escalation) — a poor fit for a synchronous HTTP request/response cycle.
+
+<br>
+
 ## 2. Artifact schema
 
 A capability artifact (`artifact_schema.py`) is a distinct data structure
@@ -177,18 +202,6 @@ self-awareness are in real tension here.
 
 ## 7. Cuts
 
-- **No framework (LangChain/LangGraph).** The agent loop is a plain
-  `while`/`for` calling the Anthropic API directly, appending each
-  assistant `tool_use` and its `tool_result` to a growing `messages` list.
-  This is fully legible — every mechanic in the loop is something I can
-  point to and explain — rather than something a framework does for me
-  that I'd have to reverse-engineer under interview questioning.<br />
-
-- **CLI, not a web service.** The deliverable asks for exact commands to
-  run, and the agent loop is inherently multi-turn and occasionally
-  long-running (including pausing indefinitely for human input during
-  escalation) — a poor fit for a synchronous HTTP request/response cycle.<br />
-
 - **Fine-grained/semantic risk classification.** The allowlist currently
   gates by action type only, not by what a click actually does — see
   Section 6.<br />
@@ -203,10 +216,3 @@ self-awareness are in real tension here.
 - **Operator UI fidelity.** The handoff mechanism and control-transfer
   model are real; the "console" is this terminal, not a dedicated
   interface, per the brief's own scope note.<br />
-
-<!-- **Model/tooling:** Claude Sonnet via direct tool-use, `disable_parallel_tool_use=True`
-(exactly one action decided per turn — simpler to reason about and log,
-at the cost of more round trips for multi-step goals). Locator strategy —
-the single decision everything else depends on — is accessibility
-role + accessible name, not CSS selectors or screenshot coordinates; see
-Section 3 for why. -->
