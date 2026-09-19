@@ -5,10 +5,13 @@
 The system is two independent CLI entrypoints sharing a common core, not
 a service. `discovery/main.py` runs the LLM-driven observe→decide→act
 loop against a live browser; `replay/main.py` executes a saved artifact
-deterministically, with no LLM involved at all. Both share `browser.py`
-(the Playwright driver), `tools.py`/`artifact_schema.py` (the action
-vocabulary), and `safety.py` (allowlist enforcement) — one implementation
-of each concern, not two drifting copies.
+deterministically, with no LLM involved at all.
+
+Both share the following dependencies, each file is one implementation of concern and not two drifting copies:
+
+- `browser.py` (the Playwright driver);
+- `tools.py`/`artifact_schema.py` (the action vocabulary); and
+- `safety.py` (allowlist enforcement).
 
 Two decisions worth defending explicitly:
 
