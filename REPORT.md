@@ -169,31 +169,39 @@ lower-priority second option.
 ## 4. Heterogeneity & multi-tenant
 
 The seam between "how we perceive/act on a surface" and "the recorded
-flow" is the artifact/driver split described above. An artifact's steps
-are pure data — `{role, name, locator_strategy}` — with no Playwright or
-DOM concept anywhere in them. `browser.py` is one driver implementation,
-backed by Playwright and the accessibility tree. A desktop driver would
-expose the identical method signatures (`click`/`type_text`/`read_text`)
-backed by OS accessibility APIs instead — UI Automation on Windows,
-AXUIElement on macOS, AT-SPI on Linux — all of which expose the same
-role+name concept a screen reader relies on. This is precisely why
-role+name was chosen over a Playwright-specific selector in the first
-place: it's the one identification concept that's genuinely
-cross-platform, not a web-only convenience. The unlabeled-element
-fallback has a direct desktop analogue too — old Win32/MFC apps routinely
-expose empty or garbage accessibility names, and the same fallback shape
-(automation ID, control class, position) would apply there.
+flow" is the artifact/driver split described above.
+
+An artifact's steps are pure data — `{role, name, locator_strategy}` —
+with no Playwright or DOM concept anywhere in them.
+
+`browser.py` is one driver implementation, backed by Playwright and the
+accessibility tree. A desktop driver would expose the identical method
+signatures (`click`/`type_text`/`read_text`) backed by OS accessibility
+APIs instead — UI Automation on Windows, AXUIElement on macOS, AT-SPI
+on Linux — all of which expose the same role+name concept a screen reader
+relies on.
+
+This is precisely why `role+name` was chosen over a Playwright-specific
+selector in the first place: it's the one identification concept that's
+genuinely cross-platform, not a web-only convenience.
+
+The unlabeled-element fallback has a direct desktop analogue too — old
+Win32/MFC apps routinely expose empty or garbage accessibility names, and
+the same fallback shape (automation ID, control class, position) would
+apply there.
 
 For multi-tenant reuse (design only, not implemented): since many
 tenants run the same underlying vendor product re-skinned, an artifact
 recorded against a "base" tenant should be parameterizable enough
 (base URL, and a per-tenant locator override table for cases where a
 re-branded instance genuinely changed a control's name) to replay against
-other tenants without re-recording from scratch. Drift detection follows
-directly from the existing error contract: if a step's target can't be
-found at replay time on a given tenant, that failure signal — not a
-silent success or an opaque crash — is exactly the mechanism that would
-flag "this tenant's version has diverged" for review.
+other tenants without re-recording from scratch.
+
+Drift detection follows directly from the existing error contract: if
+a step's target can't be found at replay time on a given tenant, that
+failure signal — not a silent success or an opaque crash — is exactly
+the mechanism that would flag "this tenant's version has diverged"
+for review.
 
 ## 5. Escalation & handoff
 
