@@ -41,7 +41,7 @@ A few architecture choices made ahead of time:
 ## 2. Artifact schema
 
 When we run `uv run python -m discovery.main` from the root folder, we end up
-creating an `discovery_log.jsonl` file in `/evidence` that serves as the basis
+creating a `discovery_log.jsonl` file in `/evidence` that serves as the basis
 for the finalized `artifact.json` that's stored in the `/artifacts` folder.
 
 > <strong>IMPORTANT</strong>: It bears stating we use Claude to look at the
@@ -68,14 +68,17 @@ it should take to achieve the target goal.
 
 Whatever next step the model decides to do, we record that step in a
 `step_logs` list. We then repeat the process again until the model
-achieves the target `goal` under the max steps it's allowed to take.
+achieves the target `goal` or we hit a stopping condition (max steps,
+timeout, or an escalation the operator chooses to abort).
 
-If it achieves the goal, we take the `step_logs` and create the final
-`discovery_log.jsonl` that serves as the basis for our reusable capability
-in `/replay/main.py`.
+Regardless of whether the goal is achieved, `step_logs` gets written to
+`discovery_log.jsonl` in a `finally` block — evidence is preserved even on
+failure or escalation, not only on success. When a run _does_ succeed,
+that log is what gets reviewed (with Claude's help, as noted above) to
+hand-author the artifact that `/replay/main.py` later consumes.
 
-When we run the final `artifact.json` file in `/replay/main.py`, it has
-the following the 4 important fields:
+The final `artifact.json` file that `/replay/main.py` consumes has these
+4 important fields:
 
 ```
 {
@@ -100,13 +103,18 @@ the model knew that based on the current elements of the current page
 it was on, it needed to find an element with a `role` of textbox and
 it could find it by using the `locator_strategy` of `attribute_fallback`.
 
-Essentially for every step, we are going to perform an `action` on a
-`target` element that we have to find by using the `locator_strategy`
-of finding that element.
+Essentially, every step performs an `action` on a `target` element,
+located using whichever `locator_strategy` that step specifies.
 
-Finally, the `outputs` field is a list of the results that you should
-get back. Each output object points at which step produced it (source_step)
-and how to pull the specific value out of that step's raw text (extraction).
+The `outputs` field is a list of the results that you should get back.
+Each output object points at which step produced it (`source_step`) and
+how to pull the specific value out of that step's raw text (`extraction`).
+
+Finally, the `checkpoint` field is one more read performed after all the
+steps finish, confirming the run actually landed where it was supposed to
+— not just that no step happened to throw an exception along the way. A
+click can technically "succeed" while still leaving you on the wrong
+page; the checkpoint is what catches that.
 
 ## 3. Determinism & error handling
 
