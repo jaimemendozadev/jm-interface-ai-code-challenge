@@ -127,36 +127,42 @@ page; the checkpoint is what catches that.
 
 ## 3. Determinism & error handling
 
-Replay (`replay/`) executes an artifact's steps in order with zero model
+Replay (`/replay`) executes an artifact's steps in order with zero model
 calls, using target-aware driver methods (`click_target`/
 `type_text_target`/`read_text_target`) that resolve a locator directly
-from the artifact's recorded strategy — no dependency on ever having
-"looked around" the page the way discovery's snapshot-driven methods do.
-This split isn't incidental duplication: discovery is blind and
-exploring; replay already knows exactly where everything is.
+from the artifact's recorded strategy. Running
+`uv run python -m replay.main` from the root folder means we're no longer
+blindly exploring a page to reach a goal — replay already knows exactly
+where everything is.
 
-The result contract distinguishes three outcomes, and the rule for
-telling them apart is simple and generalizes: **if a failing target's
-name was built by substituting a caller-supplied parameter, the failure
-is about their data, not our system — a business outcome. If a fixed,
-non-parameterized target fails, something about the app itself changed
-unexpectedly — a hard failure.** This was validated against two real
-failures, not designed in the abstract: replaying with a stale account
-number correctly produced `{"outcome": "business_outcome", "outcome_type":
-"not_found", ...}`, while a simulated failure on the non-parameterized
-Log In button correctly produced `hard_failure`. A checkpoint (re-reading
-the same record that produced the primary output) confirms the run
-actually reached the expected end state rather than assuming every prior
-click worked because it didn't raise.
+When something goes wrong, the system sorts it into one of two outcomes,
+using one simple rule: if the failing target's name came from a
+parameter the caller supplied (like an account number), the failure is
+about their data, not our system — **a "business outcome."** If a fixed
+target that's always supposed to be there fails, something about the
+app itself broke — **a "hard failure."**
 
-The accessible-name/attribute-fallback locator split doubles as the
-runtime-error story the brief emphasizes over layout drift: Parabank's
-login fields use a `<p>` tag as a visual label instead of a real
-`<label>`/`aria-label`, so the browser computes no accessible name for
-them at all. Discovery's first real run surfaced this directly — the
-fields were simply invisible to a pure accessible-name pass — which is
-what motivated the fallback pass (raw `name`/`id`/`placeholder`
-attribute) as a deliberately lower-priority second strategy.
+- **Business outcome, seen for real:** replaying with a stale account
+  number correctly produced
+  `{"outcome": "business_outcome", "outcome_type": "not_found", ...}`
+  (see `evidence/replay_20260913T210526Z/`).<br /><br />
+- **Hard failure, verified by simulation:** a simulated failure on the
+  Log In button — a fixed target, not a parameter — correctly produced
+  `hard_failure` instead.<br /><br />
+
+A checkpoint (re-reading the same record that produced the primary
+output) backs this up further: it confirms the run actually reached the
+expected end state, rather than assuming every prior click worked just
+because it didn't throw an error.
+
+Separately from that outcome taxonomy, discovery's first real run also
+surfaced a genuine runtime surprise — not layout drift, since nothing
+changed over time, but something only discoverable by actually running
+against the live page: Parabank's login fields use a `<p>` tag as a
+visual label instead of a real `<label>`/`aria-label`, so the browser
+computes no accessible name for them at all. That's what motivated the
+attribute-fallback locator strategy (Section 2) as a deliberately
+lower-priority second option.
 
 ## 4. Heterogeneity & multi-tenant
 
