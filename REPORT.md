@@ -205,11 +205,12 @@ for review.
 
 ## 5. Escalation & handoff
 
-Two independent triggers detect "stuck": Claude returning a turn with no
-tool call at all, and a cycle detector comparing the last _N_ actions
-against the _N_ before them (_N_ = 1 to 4) for an exact match — the
-agent repeating itself with no way to know it (see Section 6 for why it
-can't tell on its own).
+Two independent triggers detect "stuck":
+
+- Claude returning a turn with no tool call at all, and
+- a cycle detector comparing the last _N_ actions against the _N_ before
+  them (_N_ = 1 to 4) for an exact match — the agent repeating itself
+  with no way to know it (see Section 6 for why it can't tell on its own).
 
 The operator "console" is deliberately minimal, per the brief's own scope
 note that a full co-browsing UI is out of scope: it's this terminal
@@ -228,11 +229,12 @@ A human intervening can only fix things reachable through the browser UI
 itself. The first live test tried editing `.env` mid-pause, expecting the
 correction to take effect — it didn't, because credentials are read from
 the environment exactly once at process start, and the resumed run
-retried the same wrong password. The second attempt corrected this by
-typing real credentials directly into the browser window, and the run
-resumed and completed successfully. The honest boundary: the seam for
-handoff is "whatever's reachable through the browser," not "whatever's
-true about the process."
+retried the same wrong password.
+
+The second attempt corrected this by typing real credentials directly
+into the browser window, and the run resumed and completed successfully.
+The honest boundary: the seam for handoff is "whatever's reachable through
+the browser," not "whatever's true about the process."
 
 Separately, the cycle detector only catches an _exact_ repeat of a
 fixed-length window. A run that was still fundamentally stuck (still
@@ -246,12 +248,14 @@ Named as a limitation rather than patched under time pressure; see Cuts.
 One shared `allowlist.json`, enforced by `safety.py` before either
 discovery or replay ever opens a browser: an explicit domain allowlist
 checked at startup and before every `navigate`, and an action-type
-allowlist checked before every action executes. A known, real limitation:
-it gates by generic action _type_ (`click`/`type_text`/`navigate`), not
-by semantic intent — it cannot distinguish "click the Log In button" from
-"click the Confirm Transfer button." `risky_actions` is empty because
-this capability set is read-only; a real funds-transfer capability would
-need risk classification at a finer grain (e.g. by target-name pattern)
+allowlist checked before every action executes.
+
+A known, real limitation: it gates by generic action _type_
+(`click`/`type_text`/`navigate`), not by semantic intent — it cannot
+distinguish "click the Log In button" from "click the Confirm Transfer
+button." `risky_actions` is empty because this capability set is
+read-only; a real funds-transfer capability would need risk
+classification at a finer grain (e.g. by target-name pattern)
 before that list would gate anything meaningful.
 
 Credentials never enter the LLM's context at all. `type_credential` takes
