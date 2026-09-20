@@ -103,6 +103,15 @@ the model knew that based on the current elements of the current page
 it was on, it needed to find an element with a `role` of textbox and
 it could find it by using the `locator_strategy` of `attribute_fallback`.
 
+There are two locator strategies, and which one gets used matters:
+`accessible_name` (role + the browser's own accessible name for an
+element) is the default, preferred strategy — it's semantic, survives
+markup changes, and is the same concept available on desktop apps
+through OS accessibility APIs. `attribute_fallback` is a deliberately
+lower-confidence backup, used only when an element has no accessible
+name at all (see Section 3 for the real legacy-markup bug that made
+this fallback necessary in the first place).
+
 Essentially, every step performs an `action` on a `target` element,
 located using whichever `locator_strategy` that step specifies.
 
