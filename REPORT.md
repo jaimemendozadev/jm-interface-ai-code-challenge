@@ -49,27 +49,33 @@ for the finalized `artifact.json` that's stored in the `/artifacts` folder.
 > Unfortunately there's no automated process for creating the file after
 > running the `discovery.main` script, at least not for v1 of this challenge.
 
-On the initial traversal/step (and subsequent steps) of the Parabank website, we
-leverage the Playwright BrowserSession class to create a session object that allows
-us/the script/llm to "see" all the elements available on the page at the time of
-invocation. What happens next is we create a string description of all the elements
-on the current session/page and identify those elements by their `role`, `name`, and
-`value`.
+Without getting into the nitty gritty details, let's just say that when we
+start the script, we start at a given `url` website. We enter a loop that
+terminates at the `max-steps` number if we can't achieve the goal. When we
+enter the loop, every `step` in that loop is essentially the script/llm
+navigating through the website `url` we specified.
 
-Knowing what's available on the current session/page, we add this information as a
-`User` message that gets added to a list of messages that's sent to the Claude
-Model so it see what's on the current page. The model then decides what's the next
-step and actions it should take to achieve the target goal.
+How does the script/llm navigate the website at each `step`? The script
+leverages Playwright to "see" all the elements available on the page at
+the time of invocation. Once the script uses Playwright to see all the
+elements available on the current page, it then creates a string
+description of all the elements on the page and identifies those elements
+by their `role`, `name`, and `value`.
 
-Next steps for the model could be a tool actions like a `type_credential` or `click`
-for example. Whatever the model decided to do, we record that step in a `step_logs`
-list. We then repeat the process again until the model achieves the target under
-the max steps it's allowed to take. If it achieves the goal, we take the `step_logs`
-and create the final `discovery_log.jsonl` that serves as the basis for our reusable
-capability in `/replay/main.py`.
+That information gets sent to the model at each step of our loop so it
+can see what's on the current page and then decide what's the next action
+it should take to achieve the target goal.
 
-When we run the final `artifact.json` file in `/replay/main.py` it has the following
-the 4 important fields:
+Whatever next step the model decides to do, we record that step in a
+`step_logs` list. We then repeat the process again until the model
+achieves the target `goal` under the max steps it's allowed to take.
+
+If it achieves the goal, we take the `step_logs` and create the final
+`discovery_log.jsonl` that serves as the basis for our reusable capability
+in `/replay/main.py`.
+
+When we run the final `artifact.json` file in `/replay/main.py`, it has
+the following the 4 important fields:
 
 ```
 {
@@ -80,24 +86,27 @@ the 4 important fields:
 }
 ```
 
-The `input_parameters` are a list of described arguments with their specified types
-that are needed to run the `artifact` correctly at the time of invocation.
+The `input_parameters` are a list of described arguments with their
+specified types that are needed to run the `artifact` correctly at
+the time of invocation.
 
-The `steps` field contains a list of `step` objects that mirror the steps that were
-recorded during the initial running of the `discovery` script. Each numbered step
-tells you what the model did as an `action`, what the `target` of that step was.
+The `steps` field contains a list of `step` objects that mirror the
+steps that were recorded during the website navigating loop in the
+`discovery` script. Each numbered step tells you what the model did
+as an `action` and what the `target` of that step was.
 
-So for example, if the first step was the action of `type_credential`, the model was
-knew that based on the current elements of the curren page it was on, it needed to
-find an element with a `role` of textbox and it could find it by using the
-`locator_strategy` of `attribute_fallback`.
+So for example, if the first step was the action of `type_credential`,
+the model knew that based on the current elements of the current page
+it was on, it needed to find an element with a `role` of textbox and
+it could find it by using the `locator_strategy` of `attribute_fallback`.
 
-Essentially for every step, we were going to perform an `action` on a `target`
-element that we had to find by using the `locator_strategy` of finding that element.
+Essentially for every step, we are going to perform an `action` on a
+`target` element that we have to find by using the `locator_strategy`
+of finding that element.
 
-The `outputs` field is a list of what you get back. Each one points at which step
-produced it (source_step) and how to pull the specific value out of that step's
-raw text (extraction).
+Finally, the `outputs` field is a list of the results that you should
+get back. Each output object points at which step produced it (source_step)
+and how to pull the specific value out of that step's raw text (extraction).
 
 ## 3. Determinism & error handling
 
