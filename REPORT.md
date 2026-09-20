@@ -145,15 +145,17 @@ app itself broke — **a "hard failure."**
 - **Business outcome, seen for real:** replaying with a stale account
   number correctly produced
   `{"outcome": "business_outcome", "outcome_type": "not_found", ...}`
-  (see `evidence/replay_20260913T210526Z/`).<br /><br />
+  (see `evidence/replay_20260913T210526Z/`).
 - **Hard failure, verified by simulation:** a simulated failure on the
   Log In button — a fixed target, not a parameter — correctly produced
-  `hard_failure` instead.<br /><br />
+  `hard_failure` instead.
 
-A checkpoint (re-reading the same record that produced the primary
-output) backs this up further: it confirms the run actually reached the
-expected end state, rather than assuming every prior click worked just
-because it didn't throw an error.
+The checkpoint applies this exact same rule one more time: it's one more
+read performed after all the steps finish, and if a parameterized
+checkpoint target can't be found, that's classified as a business
+outcome too — not a crash. Either way, its real job is confirming the
+run actually reached the expected end state, rather than assuming every
+prior click worked just because it didn't throw an error.
 
 Separately from that outcome taxonomy, discovery's first real run also
 surfaced a genuine runtime surprise — not layout drift, since nothing
