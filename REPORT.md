@@ -13,8 +13,6 @@ Both share the following dependencies, each file is one implementation of concer
 - `tools.py`/`artifact_schema.py` (the action vocabulary); and
 - `safety.py` (allowlist enforcement).
 
-<br />
-
 A few architecture choices made ahead of time:
 
 - **No framework (LangChain/LangGraph).** The agent loop is a plain
@@ -22,21 +20,19 @@ A few architecture choices made ahead of time:
   assistant `tool_use` and its `tool_result` to a growing `messages` list.
   This is fully legible — every mechanic in the loop is something I can
   point to and explain — rather than something a framework does for me
-  that I'd have to reverse-engineer under interview questioning.<br />
+  that I'd have to reverse-engineer under interview questioning.
 
 - **Model/tooling:** Claude Sonnet via direct tool-use, `disable_parallel_tool_use=True`
   (exactly one action decided per turn — simpler to reason about and log,
   at the cost of more round trips for multi-step goals). Locator strategy —
   the single decision everything else depends on — is accessibility
   role + accessible name, not CSS selectors or screenshot coordinates; see
-  Section 3 for why.<br />
+  Section 3 for why.
 
 - **CLI, not a web service.** The deliverable asks for exact commands to
   run, and the agent loop is inherently multi-turn and occasionally
   long-running (including pausing indefinitely for human input during
   escalation) — a poor fit for a synchronous HTTP request/response cycle.
-
-<br>
 
 ## 2. Artifact schema
 
@@ -276,17 +272,20 @@ self-awareness are in real tension here.
 
 ## 7. Cuts
 
+- **Automatic artifact-recording from a successful discovery transcript
+  isn't built.** The artifact is currently hand-authored by reviewing
+  `discovery_log.jsonl` — a generalizable version would need code that
+  detects the minimal successful path and serializes it, rather than a
+  human making that judgment call each time.
 - **Fine-grained/semantic risk classification.** The allowlist currently
   gates by action type only, not by what a click actually does — see
-  Section 6.<br />
+  Section 6.
 - **More robust stuck-detection.** Exact-cycle-matching missed a run that
   was genuinely stuck but varied its tactics — see Section 5. Tracking
-  repeated failure _types_ or distinct pages visited would catch this.<br />
-
-- **Multi-tenant reuse and desktop support** are designed (Sections 4)
+  repeated failure _types_ or distinct pages visited would catch this.
+- **Multi-tenant reuse and desktop support** are designed (Section 4)
   but not implemented — the brief explicitly scopes this as a design
-  answer, not a build requirement.<br />
-
+  answer, not a build requirement.
 - **Operator UI fidelity.** The handoff mechanism and control-transfer
   model are real; the "console" is this terminal, not a dedicated
-  interface, per the brief's own scope note.<br />
+  interface, per the brief's own scope note.
